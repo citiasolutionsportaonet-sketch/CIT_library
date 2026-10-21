@@ -77,13 +77,18 @@ describe("organização do catálogo", () => {
     await recordCost(owner, id, new Decimal("100.10"), new Date(Date.now() - 1000), "x");
     const o = await exportProductsCsv(owner, {});
     expect(o.csv).toContain("Custo distribuidor");
+    expect(o.csv).toContain("Markup (%)");
     expect(o.csv).toContain("100,10");
     expect(o.csv).toContain("'=HYPERLINK");
     expect(o.csv).toContain("0001;");
     const v = await exportProductsCsv(viewer, {});
     expect(v.csv).not.toContain("Custo distribuidor");
+    expect(v.csv).not.toContain("Markup (%)");
     expect(v.csv).not.toContain("100,10");
     expect(v.csv).toContain("145,15"); // preço CIT visível
+    const csvLines = v.csv.trim().split("\r\n");
+    expect(csvLines[0].split(";")).toHaveLength(16);
+    expect(csvLines[1].split(";")).toHaveLength(16);
     expect(await getDb().auditEvent.count({ where: { tenantId: t.id, action: { startsWith: "export.products" } } })).toBe(2);
   });
 });

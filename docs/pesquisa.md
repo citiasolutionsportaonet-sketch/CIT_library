@@ -12,7 +12,7 @@ Serviço independente do Claude Code: roda no **worker** (`npm run worker`), len
 
 ## Regras de acesso à internet
 - robots.txt respeitado por domínio; 5xx no robots = não acessar.
-- Bloqueio de IP privado/loopback/metadados (SSRF), inclusive após redirecionamento.
+- Bloqueio de IP privado/loopback/metadados (SSRF), inclusive IPv4 mapeado em IPv6, faixas especiais e redirecionamentos. O conector HTTP usa os próprios endereços DNS validados ao abrir o socket, para impedir troca do destino entre a checagem e a conexão (DNS rebinding). Certificados TLS continuam sendo verificados.
 - Limite por domínio (`RESEARCH_HOST_RPM`), tamanho (10 MB imagem, 25 MB PDF) e tempo.
 - Bloqueios do site (403, anti-robô) **não são contornados**: o item fica com a nota do bloqueio.
 

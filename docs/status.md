@@ -1,5 +1,12 @@
 # Status por fase
 
+## Correções de segurança — 21/10/2026
+
+- Markup restrito a quem tem `costs:read`, tanto na interface quanto na API e no CSV. O preço de venda continua visível. Se o percentual já for conhecido externamente, ainda é possível estimar o custo a partir do preço.
+- Pesquisa: bloqueio de IPv4 mapeado em IPv6 e faixas especiais; conexão HTTP usa os endereços DNS validados, com validação de cada redirecionamento e TLS preservado.
+- Validação Linux/Node 22.23.3/PostgreSQL 17.11: 158 unitários e 39 de integração passaram; lint, tipos, build e auditoria de dependências de produção passaram. Dos 7 cenários E2E, 6 passaram na primeira execução; o seletor ambíguo de Brave foi corrigido e o cenário restante passou ao ser repetido.
+- Pendências da análise: mediana deve considerar a observação vigente de cada anúncio, e restauração deve reprovar divergência na contagem de mídias. Organização/revisão do catálogo continua pendente. Nenhuma classificação foi aplicada aos dados reais nesta correção.
+
 ## Fase 0 — fundação · **verificada** (PostgreSQL local sem Docker)
 Pronto: scaffold Next 16.4.2, TS estrito, Tailwind 4, Prisma 7.10.1 (`prisma.config.ts`, adaptador pg), Compose PostgreSQL 17.11 com digest e healthcheck em loopback, `.env.example`, migração inicial, `/api/health` (só status; 503 sem banco), scripts do contrato.
 Banco local em `var/pgdata` (`npm run db:local:start`); migração aplicada; health ok. Docker Compose continua disponível como alternativa.

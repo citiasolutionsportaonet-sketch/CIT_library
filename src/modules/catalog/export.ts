@@ -36,15 +36,15 @@ export async function exportProductsCsv(ctx: TenantContext, filter: ListParams):
   for (let i = 0; i < products.length; i += 1000) {
     for (const [k, v] of await pricingFor(ctx, products.slice(i, i + 1000).map((p) => p.id))) prices.set(k, v);
   }
-  const header = ["SKU", "Nome", "Marca", "Modelo", "Modelo sugerido", "Categoria", "Status", "Unidade", "EAN/GTIN", "Código do fabricante", ...(withCost ? ["Custo distribuidor (R$)"] : []), "Markup (%)", "Preço CIT (R$)", "Mediana online (R$)", "Ofertas na mediana", "Referência comercial mediana+15% (R$)", "Diferença CIT x mediana (R$)", "Situação da pesquisa"];
+  const header = ["SKU", "Nome", "Marca", "Modelo", "Modelo sugerido", "Categoria", "Status", "Unidade", "EAN/GTIN", "Código do fabricante", ...(withCost ? ["Custo distribuidor (R$)", "Markup (%)"] : []), "Preço CIT (R$)", "Mediana online (R$)", "Ofertas na mediana", "Referência comercial mediana+15% (R$)", "Diferença CIT x mediana (R$)", "Situação da pesquisa"];
   const lines = [header.map(csvCell).join(";")];
   for (const p of products) {
     const pr = prices.get(p.id)!;
     lines.push(
       [
         p.sku, p.name, p.brand?.name, p.model, p.suggestedModel, p.category?.name, p.status, p.unit, p.gtin, p.manufacturerCode,
-        ...(withCost ? [money(pr.cost)] : []),
-        pr.markupPct.replace(".", ","), money(pr.citPrice), money(pr.marketMedian), pr.marketCount, money(pr.webReference), money(pr.diffAbs), p.researchStatus,
+        ...(withCost ? [money(pr.cost), money(pr.markupPct)] : []),
+        money(pr.citPrice), money(pr.marketMedian), pr.marketCount, money(pr.webReference), money(pr.diffAbs), p.researchStatus,
       ].map(csvCell).join(";"),
     );
   }

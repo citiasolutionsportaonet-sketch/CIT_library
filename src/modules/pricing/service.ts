@@ -73,14 +73,14 @@ export async function currentPrices(tenantId: string, priceListId: string, produ
 
 export type PricingView = Omit<PricingResult, "cost" | "markup"> & {
   cost: string | null;
-  markupPct: string;
+  markupPct: string | null;
   citPrice: string | null;
 };
 
 function serialize(r: PricingResult, includeCost: boolean) {
   return {
     cost: includeCost && r.cost ? r.cost.toFixed(2) : null,
-    markupPct: r.markup.times(100).toFixed(2),
+    markupPct: includeCost ? r.markup.times(100).toFixed(2) : null,
     citPrice: r.citPrice?.toFixed(2) ?? null,
     marketMedian: r.marketMedian?.toFixed(2) ?? null,
     marketCount: r.marketCount,

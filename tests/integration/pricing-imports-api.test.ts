@@ -103,14 +103,16 @@ describe("preço vigente e custo", () => {
     const viewer = await makeCtx(t, "VIEWER");
     const { id } = await createProduct(owner, { name: "P", sku: "P1" });
     await recordCost(owner, id, new Decimal("278.50"), new Date(Date.now() - 1000), "x");
-    expect((await pricingFor(owner, [id])).get(id)).toMatchObject({ cost: "278.50", citPrice: "403.83" });
+    expect((await pricingFor(owner, [id])).get(id)).toMatchObject({ cost: "278.50", markupPct: "45.00", citPrice: "403.83" });
     expect(await code(updateMarkup(owner, "46"))).toBe("VALIDATION");
     expect(await code(updateMarkup(viewer, "10"))).toBe("FORBIDDEN");
     await updateMarkup(owner, "20");
     const v = (await pricingFor(viewer, [id])).get(id)!;
     expect(v.citPrice).toBe("334.20");
     expect(v.cost).toBeNull();
+    expect(v.markupPct).toBeNull();
     expect(JSON.stringify(v)).not.toContain("278.5");
+    expect((await pricingFor(owner, [id], { forceHideCost: true })).get(id)).toMatchObject({ cost: null, markupPct: null, citPrice: "334.20" });
   });
 
   it("oferta de página de busca nunca entra na mediana", async () => {
@@ -197,12 +199,15 @@ describe("API v1", () => {
     expect(list.data.map((d) => d.sku)).toEqual(["A1"]);
     expect(list.data[0].pricing).toMatchObject({ citPrice: "145.00" });
     expect(JSON.stringify(list)).not.toContain("distributorCost");
+    expect(list.data[0].pricing).not.toHaveProperty("markupPercent");
+    expect((await apiGetProduct(p, pa)).data.pricing).not.toHaveProperty("markupPercent");
     expect(await code(apiGetProduct(p, pb))).toBe("NOT_FOUND"); // outro tenant
     expect((await apiProductPrices(p, pa)).data.pricing).not.toHaveProperty("distributorCost");
+    expect((await apiProductPrices(p, pa)).data.pricing).not.toHaveProperty("markupPercent");
 
     const internal = await createCredential(a, { name: "SysGuard", scopes: ["catalog:read", "costs:read", "prices:read"] });
     const pi = await authenticateApi(req(internal.token), "r");
-    expect((await apiGetProduct(pi, pa)).data.pricing).toMatchObject({ distributorCost: "100.00" });
+    expect((await apiGetProduct(pi, pa)).data.pricing).toMatchObject({ distributorCost: "100.00", markupPercent: "45.00", citPrice: "145.00" });
 
     expect(await code(authenticateApi(req(), "r"))).toBe("UNAUTHENTICATED");
     expect(await code(authenticateApi(req(basic.token.slice(0, -1) + "x"), "r"))).toBe("UNAUTHENTICATED");

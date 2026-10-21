@@ -35,7 +35,7 @@ test("importação pela tela: prévia não grava; confirmação enfileira", asyn
 test("painel de pesquisa e markup", async ({ page }) => {
   await page.getByRole("link", { name: "Pesquisa" }).click();
   await expect(page.getByText("Total de produtos")).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Brave Search API" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Brave Search API", exact: true })).toBeVisible();
   await expect(page.getByRole("checkbox", { name: /Brave Search API \(sem credencial\)/ })).toBeDisabled();
   await page.getByRole("link", { name: "Configurações" }).click();
   // Acima de 45%: o próprio navegador bloqueia o envio (o servidor também recusa; ver integração).

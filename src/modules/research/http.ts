@@ -1,6 +1,7 @@
 import "server-only";
 import { lookup } from "node:dns/promises";
 import net from "node:net";
+import { Agent, fetch as researchFetch } from "undici";
 import { consumeRateLimit } from "@/server/rate-limit";
 import { isAllowed, parseRobots, type RobotsRules } from "./robots";
 
@@ -18,16 +19,40 @@ export class FetchBlocked extends Error {
   }
 }
 
-/** IP privado, loopback, link-local, CGNAT, multicast ou reservado. */
+// BlockList compara o endereço binário e reconhece IPv4 mapeado em IPv6,
+// inclusive ::ffff:7f00:1 e endereços com zeros expandidos.
+const blockedIps = new net.BlockList();
+for (const [address, prefix] of [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10],
+  ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
+  ["192.0.0.0", 24], ["192.0.2.0", 24], ["192.168.0.0", 16],
+  ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24],
+  ["224.0.0.0", 4], ["240.0.0.0", 4],
+] as const) blockedIps.addSubnet(address, prefix, "ipv4");
+for (const [address, prefix] of [
+  ["::", 96], ["64:ff9b::", 96], ["64:ff9b:1::", 48],
+  ["100::", 64], ["2001::", 32], ["2001:db8::", 32], ["2002::", 16],
+  ["fc00::", 7], ["fe80::", 10], ["ff00::", 8],
+] as const) blockedIps.addSubnet(address, prefix, "ipv6");
+
+/** IP privado, loopback, link-local, CGNAT, multicast, reservado ou inválido. */
 export function isPrivateIp(ip: string): boolean {
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split(".").map(Number);
-    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224;
-  }
-  const v = ip.toLowerCase();
-  if (v.startsWith("::ffff:")) return isPrivateIp(v.slice(7));
-  return v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe8") || v.startsWith("fe9") || v.startsWith("fea") || v.startsWith("feb") || v.startsWith("ff");
+  const family = net.isIP(ip);
+  return family === 0 || blockedIps.check(ip, family === 4 ? "ipv4" : "ipv6");
 }
+
+/** O socket recebe os próprios IPs validados: não há uma nova resolução DNS. */
+export const publicLookup: net.LookupFunction = (hostname, options, callback) => {
+  void lookup(hostname, { ...options, all: true }).then((addrs) => {
+    if (addrs.length === 0 || addrs.some((a) => isPrivateIp(a.address))) {
+      callback(new FetchBlocked(`Destino interno bloqueado: ${hostname}`, "ssrf"), "", 0);
+      return;
+    }
+    callback(null, options.all ? addrs : addrs[0].address, addrs[0].family);
+  }, (err: NodeJS.ErrnoException) => callback(err, "", 0));
+};
+
+const researchAgent = new Agent({ connect: { lookup: publicLookup } });
 
 async function assertPublicHost(url: URL) {
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new FetchBlocked("Esquema não permitido", "scheme");
@@ -64,15 +89,19 @@ async function rawFetch(url: URL, maxBytes: number, timeoutMs: number, accept: s
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      const res = await fetch(current, { redirect: "manual", signal: ctrl.signal, headers: { "user-agent": USER_AGENT, accept, "accept-language": "pt-BR,pt;q=0.9" } });
+      const res = await researchFetch(current.toString(), { dispatcher: researchAgent, redirect: "manual", signal: ctrl.signal, headers: { "user-agent": USER_AGENT, accept, "accept-language": "pt-BR,pt;q=0.9" } });
       if ([301, 302, 303, 307, 308].includes(res.status)) {
         const loc = res.headers.get("location");
+        await res.body?.cancel();
         if (!loc) throw new FetchBlocked("Redirecionamento sem destino", "status");
         current = new URL(loc, current);
         continue;
       }
       const len = Number(res.headers.get("content-length") ?? 0);
-      if (len > maxBytes) throw new FetchBlocked("Resposta grande demais", "size");
+      if (len > maxBytes) {
+        await res.body?.cancel();
+        throw new FetchBlocked("Resposta grande demais", "size");
+      }
       const chunks: Buffer[] = [];
       let total = 0;
       if (res.body) {
@@ -85,9 +114,12 @@ async function rawFetch(url: URL, maxBytes: number, timeoutMs: number, accept: s
           chunks.push(Buffer.from(chunk));
         }
       }
-      return { status: res.status, url: current.toString(), contentType: res.headers.get("content-type") ?? "", body: Buffer.concat(chunks), headers: res.headers };
+      const headers = new Headers();
+      res.headers.forEach((value, name) => headers.append(name, value));
+      return { status: res.status, url: current.toString(), contentType: headers.get("content-type") ?? "", body: Buffer.concat(chunks), headers };
     } catch (e) {
       if ((e as Error).name === "AbortError") throw new FetchBlocked("Tempo esgotado", "timeout");
+      if ((e as Error).cause instanceof FetchBlocked) throw (e as Error).cause;
       throw e;
     } finally {
       clearTimeout(t);

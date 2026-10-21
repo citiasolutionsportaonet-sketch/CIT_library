@@ -29,7 +29,6 @@ async function pricingMap(p: ApiPrincipal, ids: string[]) {
     out.set(id, {
       currency: "BRL",
       citPrice: r.citPrice?.toFixed(2) ?? null,
-      markupPercent: r.markup.times(100).toFixed(2),
       market: {
         median: r.marketMedian?.toFixed(2) ?? null,
         acceptedOffers: r.marketCount,
@@ -39,7 +38,7 @@ async function pricingMap(p: ApiPrincipal, ids: string[]) {
         commercialReferenceNote: "Mediana de ofertas online aceitas acrescida do ajuste comercial; não é um preço anunciado.",
       },
       citVsMarket: { difference: r.diffAbs?.toFixed(2) ?? null, percent: r.diffPct?.toFixed(1) ?? null },
-      ...(p.scopes.has("costs:read") ? { distributorCost: r.cost?.toFixed(2) ?? null } : {}),
+      ...(p.scopes.has("costs:read") ? { distributorCost: r.cost?.toFixed(2) ?? null, markupPercent: r.markup.times(100).toFixed(2) } : {}),
     });
   }
   return out;

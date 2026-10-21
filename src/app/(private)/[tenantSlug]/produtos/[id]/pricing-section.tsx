@@ -2,7 +2,7 @@ import { formatBRL } from "@/modules/pricing/calc";
 
 type Pricing = {
   cost: string | null;
-  markupPct: string;
+  markupPct: string | null;
   citPrice: string | null;
   marketMedian: string | null;
   marketCount: number;
@@ -20,12 +20,14 @@ export function PricingSection({ pricing: p, canSeeCost }: { pricing: Pricing; c
       <h2 className="mb-3 font-semibold">Preços</h2>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded border border-slate-200 p-3">
-          <h3 className="text-sm font-semibold">1. Preço CIT (custo + markup)</h3>
+          <h3 className="text-sm font-semibold">1. Preço CIT{canSeeCost ? " (custo + markup)" : ""}</h3>
           <dl className="mt-2 space-y-1 text-sm">
             {canSeeCost && (
               <div className="flex justify-between"><dt className="text-slate-500">Custo no distribuidor <span className="text-[11px]">(interno)</span></dt><dd>{p.cost ? formatBRL(p.cost) : "sem custo informado"}</dd></div>
             )}
-            <div className="flex justify-between"><dt className="text-slate-500">Markup sobre custo</dt><dd>{p.markupPct.replace(".", ",")}%</dd></div>
+            {canSeeCost && p.markupPct !== null && (
+              <div className="flex justify-between"><dt className="text-slate-500">Markup sobre custo</dt><dd>{p.markupPct.replace(".", ",")}%</dd></div>
+            )}
             <div className="flex justify-between text-base font-semibold"><dt>Preço CIT</dt><dd>{formatBRL(p.citPrice)}</dd></div>
           </dl>
         </div>

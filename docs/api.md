@@ -5,6 +5,8 @@
 - Organização vem **só** da credencial; nada no corpo ou cabeçalho escolhe outro tenant.
 - Escopos: `catalog:read` (obrigatório), `prices:read` (Preço CIT e mercado), `costs:read` (custo do distribuidor — só para sistemas internos).
 - Limite: `API_RATE_PER_MINUTE` por credencial (429). Decimais como string. Notas internas nunca saem pela API.
+- `markupPercent` e `distributorCost` só são retornados com `costs:read`. Sem esse escopo, o preço de venda continua disponível com `prices:read`, mas esses dois campos são omitidos. Na interface e no CSV, o markup também acompanha a permissão de leitura de custos.
+- Essa restrição evita divulgar o percentual interno pela API. Se o markup for conhecido por outro meio, o preço calculado ainda permite estimar o custo por divisão; não é uma garantia de sigilo matemático do custo.
 
 | Rota | Escopo |
 |---|---|

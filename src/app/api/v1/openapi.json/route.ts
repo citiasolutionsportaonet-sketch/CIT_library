@@ -14,7 +14,7 @@ const spec = {
         properties: {
           currency: { type: "string", example: "BRL" },
           citPrice: money,
-          markupPercent: { type: "string" },
+          markupPercent: { type: "string", description: "Somente com escopo costs:read" },
           market: { type: "object", properties: { median: money, acceptedOffers: { type: "integer" }, sufficient: { type: "boolean" }, commercialReference: { ...money, description: "Mediana × 1,15 — referência calculada, NÃO é preço anunciado" }, commercialReferenceNote: { type: "string" } } },
           citVsMarket: { type: "object", properties: { difference: money, percent: { type: "string", nullable: true } } },
           distributorCost: { ...money, description: "Somente com escopo costs:read" },
