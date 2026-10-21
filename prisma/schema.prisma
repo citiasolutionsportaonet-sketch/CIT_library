@@ -1,0 +1,785 @@
+// CIT Library — schema Prisma 7.
+// Convenções: IDs UUID gerados no banco, instantes em timestamptz (UTC),
+// tenantId obrigatório nas tabelas de domínio e FKs compostas (tenantId, id)
+// para impedir relacionar registros de organizações diferentes.
+// Constraints que o Prisma não modela (CHECK) ficam na migração SQL.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Autenticação (modelos exigidos pelo Better Auth 1.7; globais, sem tenant)
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @db.Timestamptz(3)
+
+  sessions    Session[]
+  accounts    Account[]
+  memberships Membership[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  expiresAt DateTime @db.Timestamptz(3)
+  token     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  ipAddress String?
+  userAgent String?
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId             String
+  providerId            String
+  userId                String    @db.Uuid
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// Contadores de rate limit persistentes (login por IP e por conta).
+model RateLimitBucket {
+  key         String   @id
+  count       Int
+  windowStart DateTime @db.Timestamptz(3)
+
+  @@index([windowStart])
+  @@map("rate_limit_bucket")
+}
+
+// Estado operacional global (modo de manutenção usado pelo backup).
+model SystemState {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@map("system_state")
+}
+
+// ---------------------------------------------------------------------------
+// Organizações e acesso
+// ---------------------------------------------------------------------------
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model Tenant {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  slug      String       @unique
+  status    TenantStatus @default(ACTIVE)
+  timezone  String       @default("America/Sao_Paulo")
+  createdAt DateTime     @default(now()) @db.Timestamptz(3)
+
+  memberships  Membership[]
+  invitations  Invitation[]
+  brands       Brand[]
+  categories   Category[]
+  tags         Tag[]
+  products     Product[]
+  productTags  ProductTag[]
+  mediaAssets  MediaAsset[]
+  productMedia ProductMedia[]
+  auditEvents  AuditEvent[]
+  priceLists   PriceList[]
+  priceEntries PriceEntry[]
+  importBatches ImportBatch[]
+  importRows   ImportRow[]
+  pricingConfig PricingConfig?
+  marketOffers MarketOffer[]
+  researchAssets ResearchAsset[]
+  researchRuns ResearchRun[]
+  jobs         Job[]
+  apiCredentials ApiCredential[]
+
+  @@map("tenant")
+}
+
+model Membership {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @db.Uuid
+  userId    String   @db.Uuid
+  role      Role
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("membership")
+}
+
+model Invitation {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @db.Uuid
+  email       String
+  role        Role
+  tokenHash   String    @unique
+  expiresAt   DateTime  @db.Timestamptz(3)
+  acceptedAt  DateTime? @db.Timestamptz(3)
+  revokedAt   DateTime? @db.Timestamptz(3)
+  createdById String    @db.Uuid
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, email])
+  @@map("invitation")
+}
+
+// ---------------------------------------------------------------------------
+// Cadastros auxiliares
+// ---------------------------------------------------------------------------
+
+model Brand {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @db.Uuid
+  name           String
+  normalizedName String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  products Product[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, normalizedName])
+  @@map("brand")
+}
+
+model Category {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @db.Uuid
+  name           String
+  normalizedName String
+  parentId       String?  @db.Uuid
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  parent   Category?  @relation("CategoryTree", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, normalizedName])
+  @@index([tenantId, parentId])
+  @@map("category")
+}
+
+model Tag {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @db.Uuid
+  name           String
+  normalizedName String
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  products ProductTag[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, normalizedName])
+  @@map("tag")
+}
+
+// ---------------------------------------------------------------------------
+// Produtos e mídia
+// ---------------------------------------------------------------------------
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Product {
+  id                         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                   String        @db.Uuid
+  sku                        String
+  normalizedSku              String
+  name                       String
+  brandId                    String?       @db.Uuid
+  categoryId                 String?       @db.Uuid
+  model                      String?
+  manufacturerCode           String?
+  normalizedManufacturerCode String?
+  gtin                       String?
+  description                String?
+  unit                       String        @default("UN")
+  status                     ProductStatus @default(DRAFT)
+  specs                      Json          @default("[]")
+  links                      Json          @default("[]")
+  internalNotes              String?
+  coverMediaId               String?       @db.Uuid
+  // Pesquisa automática: sugestões nunca sobrescrevem campos sem aprovação.
+  researchStatus             ResearchStatus @default(PENDING)
+  lastResearchAt             DateTime?     @db.Timestamptz(3)
+  suggestedManufacturer      String?
+  suggestedModel             String?
+  version                    Int           @default(1)
+  createdById                String        @db.Uuid
+  updatedById                String        @db.Uuid
+  createdAt                  DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt                  DateTime      @default(now()) @db.Timestamptz(3)
+  archivedAt                 DateTime?     @db.Timestamptz(3)
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  brand    Brand?         @relation(fields: [tenantId, brandId], references: [tenantId, id], onDelete: Restrict)
+  category Category?      @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  tags     ProductTag[]
+  media    ProductMedia[] @relation("ProductMediaLinks")
+  cover    ProductMedia?  @relation("ProductCover", fields: [tenantId, id, coverMediaId], references: [tenantId, productId, mediaId], onDelete: Restrict)
+  prices   PriceEntry[]
+  offers   MarketOffer[]
+  researchAssets ResearchAsset[]
+  importRows ImportRow[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, normalizedSku])
+  // Nulos são distintos no PostgreSQL: a unicidade só vale com código preenchido.
+  // O serviço exige marca sempre que o código do fabricante é informado.
+  @@unique([tenantId, brandId, normalizedManufacturerCode])
+  @@index([tenantId, status, updatedAt])
+  @@index([tenantId, name])
+  @@index([tenantId, brandId])
+  @@index([tenantId, categoryId])
+  @@index([tenantId, researchStatus])
+  @@map("product")
+}
+
+model ProductTag {
+  tenantId  String @db.Uuid
+  productId String @db.Uuid
+  tagId     String @db.Uuid
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tenantId, tagId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([productId, tagId])
+  @@index([tenantId, tagId])
+  @@map("product_tag")
+}
+
+enum MediaKind {
+  IMAGE
+  PDF
+}
+
+enum MediaState {
+  PENDING
+  READY
+  FAILED
+  DELETING
+}
+
+model MediaAsset {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String     @db.Uuid
+  storageKey   String     @unique
+  originalName String
+  detectedMime String
+  byteSize     Int
+  sha256       String
+  width        Int?
+  height       Int?
+  kind         MediaKind
+  state        MediaState @default(PENDING)
+  createdById  String     @db.Uuid
+  createdAt    DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime   @default(now()) @updatedAt @db.Timestamptz(3)
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  products ProductMedia[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, state, createdAt])
+  @@map("media_asset")
+}
+
+model ProductMedia {
+  tenantId  String   @db.Uuid
+  productId String   @db.Uuid
+  mediaId   String   @db.Uuid
+  position  Int
+  altText   String   @default("")
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  product   Product    @relation("ProductMediaLinks", fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+  media     MediaAsset @relation(fields: [tenantId, mediaId], references: [tenantId, id], onDelete: Restrict)
+  coverOf   Product[]  @relation("ProductCover")
+
+  @@id([productId, mediaId])
+  @@unique([tenantId, productId, mediaId])
+  @@index([tenantId, mediaId])
+  @@index([productId, position])
+  @@map("product_media")
+}
+
+// ---------------------------------------------------------------------------
+// Auditoria (append-only; o usuário de aplicação não tem UPDATE/DELETE)
+// ---------------------------------------------------------------------------
+
+model AuditEvent {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @db.Uuid
+  actorId       String?  @db.Uuid
+  action        String
+  entityType    String
+  entityId      String
+  sanitizedDiff Json     @default("{}")
+  requestId     String
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@map("audit_event")
+}
+
+// ---------------------------------------------------------------------------
+// Preços (append-only). Dinheiro em Decimal(18,4) + moeda ISO 4217.
+// ---------------------------------------------------------------------------
+
+enum PriceListKind {
+  COST
+  SALE
+  REFERENCE
+}
+
+enum PriceSource {
+  MANUAL
+  IMPORT
+}
+
+model PriceList {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String        @db.Uuid
+  name           String
+  normalizedName String
+  supplier       String?
+  currency       String        @default("BRL") @db.Char(3)
+  kind           PriceListKind
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  entries PriceEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, normalizedName])
+  @@map("price_list")
+}
+
+model PriceEntry {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String      @db.Uuid
+  productId    String      @db.Uuid
+  priceListId  String      @db.Uuid
+  amount       Decimal     @db.Decimal(18, 4)
+  currency     String      @default("BRL") @db.Char(3)
+  effectiveAt  DateTime    @db.Timestamptz(3)
+  recordedAt   DateTime    @default(now()) @db.Timestamptz(3)
+  source       PriceSource
+  importRowId  String?     @db.Uuid
+  supersedesId String?     @db.Uuid
+  reason       String?
+  createdById  String      @db.Uuid
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  product   Product    @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+  priceList PriceList  @relation(fields: [tenantId, priceListId], references: [tenantId, id], onDelete: Restrict)
+  importRow ImportRow? @relation(fields: [tenantId, importRowId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  // Idempotência da importação: uma linha gera no máximo um preço.
+  @@unique([importRowId])
+  @@index([tenantId, productId, priceListId, effectiveAt, recordedAt, id])
+  @@map("price_entry")
+}
+
+// Parâmetros comerciais por organização (markup sobre custo).
+model PricingConfig {
+  tenantId          String   @id @db.Uuid
+  markup            Decimal  @default(0.45) @db.Decimal(6, 4)
+  markupMax         Decimal  @default(0.45) @db.Decimal(6, 4)
+  webUplift         Decimal  @default(0.15) @db.Decimal(6, 4)
+  minOffersForMedian Int     @default(3)
+  offerMaxAgeDays   Int      @default(90)
+  updatedById       String?  @db.Uuid
+  updatedAt         DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@map("pricing_config")
+}
+
+// ---------------------------------------------------------------------------
+// Importação
+// ---------------------------------------------------------------------------
+
+enum ImportStatus {
+  PARSED
+  CONFIRMED
+  APPLYING
+  COMPLETED
+  CANCELED
+  FAILED
+}
+
+enum ImportRowStatus {
+  VALID
+  INVALID
+  CONFLICT
+  APPLIED
+  SKIPPED
+}
+
+model ImportBatch {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String       @db.Uuid
+  supplier      String
+  profile       String
+  fileName      String
+  sha256        String
+  storageKey    String
+  mapping       Json         @default("{}")
+  parserVersion String
+  status        ImportStatus @default(PARSED)
+  counters      Json         @default("{}")
+  effectiveAt   DateTime?    @db.Timestamptz(3)
+  updatePolicy  Json         @default("{}")
+  justification String?
+  createdById   String       @db.Uuid
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
+  confirmedAt   DateTime?    @db.Timestamptz(3)
+  startedAt     DateTime?    @db.Timestamptz(3)
+  completedAt   DateTime?    @db.Timestamptz(3)
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  rows   ImportRow[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, sha256])
+  @@map("import_batch")
+}
+
+model ImportRow {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String          @db.Uuid
+  batchId          String          @db.Uuid
+  rowNumber        Int
+  raw              Json
+  normalized       Json            @default("{}")
+  errors           Json            @default("[]")
+  warnings         Json            @default("[]")
+  status           ImportRowStatus
+  action           String?
+  matchedProductId String?         @db.Uuid
+  appliedAt        DateTime?       @db.Timestamptz(3)
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  batch   ImportBatch  @relation(fields: [tenantId, batchId], references: [tenantId, id], onDelete: Restrict)
+  product Product?     @relation(fields: [tenantId, matchedProductId], references: [tenantId, id], onDelete: Restrict)
+  prices  PriceEntry[]
+
+  @@unique([tenantId, id])
+  @@unique([batchId, rowNumber])
+  @@index([tenantId, batchId, status])
+  @@map("import_row")
+}
+
+// ---------------------------------------------------------------------------
+// Pesquisa de mercado e enriquecimento
+// ---------------------------------------------------------------------------
+
+enum ResearchStatus {
+  PENDING
+  QUEUED
+  IN_PROGRESS
+  NEEDS_REVIEW
+  ENRICHED
+  NO_DATA
+  FAILED
+}
+
+enum OfferOrigin {
+  ENGINE
+  MANUAL
+  IMPORT_PRELIMINARY
+}
+
+enum ReviewStatus {
+  CANDIDATE
+  ACCEPTED
+  REJECTED
+}
+
+enum OfferCondition {
+  NEW
+  USED
+  REFURBISHED
+  UNKNOWN
+}
+
+// Cotação observada na internet. Nunca é alterada; revisão muda só o status.
+model MarketOffer {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String         @db.Uuid
+  productId     String         @db.Uuid
+  provider      String
+  sourceName    String
+  url           String
+  title         String
+  price         Decimal        @db.Decimal(18, 4)
+  shipping      Decimal?       @db.Decimal(18, 4)
+  currency      String         @default("BRL") @db.Char(3)
+  condition     OfferCondition @default(UNKNOWN)
+  observedAt    DateTime       @db.Timestamptz(3)
+  origin        OfferOrigin
+  isListingPage Boolean        @default(false)
+  matchScore    Int            @default(0)
+  matchReasons  Json           @default("[]")
+  status        ReviewStatus   @default(CANDIDATE)
+  reviewNote    String?
+  reviewedById  String?        @db.Uuid
+  reviewedAt    DateTime?      @db.Timestamptz(3)
+  runId         String?        @db.Uuid
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+
+  // A mesma URL pode ter preços diferentes no mesmo dia (ex.: listagem com
+  // várias ofertas): o preço faz parte da identidade da observação.
+  @@unique([tenantId, productId, provider, url, observedAt, price])
+  @@index([tenantId, productId, status, observedAt])
+  @@index([tenantId, status])
+  @@map("market_offer")
+}
+
+enum ResearchAssetKind {
+  IMAGE
+  DATASHEET
+  MANUAL
+  OFFICIAL_PAGE
+  SPEC
+}
+
+enum SourceType {
+  OFFICIAL
+  AUTHORIZED_DISTRIBUTOR
+  MARKETPLACE
+  RESELLER
+  OTHER
+}
+
+// Imagem, documento, página oficial ou especificação encontrada.
+model ResearchAsset {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String            @db.Uuid
+  productId   String            @db.Uuid
+  kind        ResearchAssetKind
+  url         String
+  sourceType  SourceType
+  sourceName  String
+  title       String?
+  // SPEC: chave/valor/unidade extraídos (ex.: fabricante, modelo, resolução).
+  data        Json              @default("{}")
+  httpStatus  Int?
+  contentType String?
+  byteSize    Int?
+  width       Int?
+  height      Int?
+  sha256      String?
+  verifiedAt  DateTime?         @db.Timestamptz(3)
+  status      ReviewStatus      @default(CANDIDATE)
+  mediaId     String?           @db.Uuid
+  reviewNote  String?
+  reviewedById String?          @db.Uuid
+  reviewedAt  DateTime?         @db.Timestamptz(3)
+  origin      OfferOrigin
+  runId       String?           @db.Uuid
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, productId, kind, url])
+  @@index([tenantId, productId, kind, status])
+  @@index([tenantId, status])
+  @@map("research_asset")
+}
+
+// ---------------------------------------------------------------------------
+// Fila persistente (worker em processo separado)
+// ---------------------------------------------------------------------------
+
+enum RunStatus {
+  RUNNING
+  PAUSED
+  CANCELED
+  COMPLETED
+}
+
+model ResearchRun {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @db.Uuid
+  name         String
+  status       RunStatus @default(RUNNING)
+  providers    Json      @default("[]")
+  // Opções da execução (ex.: { autoApproveOfficialImages: true }).
+  options      Json      @default("{}")
+  maxApiCalls  Int
+  maxCostCents Int
+  apiCalls     Int       @default(0)
+  costCents    Int       @default(0)
+  totalJobs    Int       @default(0)
+  createdById  String    @db.Uuid
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  finishedAt   DateTime? @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  jobs   Job[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, createdAt])
+  @@map("research_run")
+}
+
+enum JobType {
+  RESEARCH_PRODUCT
+  IMPORT_APPLY
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+model Job {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @db.Uuid
+  type        JobType
+  runId       String?   @db.Uuid
+  productId   String?   @db.Uuid
+  batchId     String?   @db.Uuid
+  actorId     String    @db.Uuid
+  payload     Json      @default("{}")
+  status      JobStatus @default(QUEUED)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  runAfter    DateTime  @default(now()) @db.Timestamptz(3)
+  leaseUntil  DateTime? @db.Timestamptz(3)
+  heartbeatAt DateTime? @db.Timestamptz(3)
+  lockedBy    String?
+  lastError   String?
+  result      Json?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  startedAt   DateTime? @db.Timestamptz(3)
+  finishedAt  DateTime? @db.Timestamptz(3)
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  run    ResearchRun? @relation(fields: [tenantId, runId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([status, runAfter])
+  @@index([tenantId, runId, status])
+  @@index([tenantId, batchId, status])
+  @@map("job")
+}
+
+// Uso de provedores por dia (controle de custo e limite).
+model ProviderUsage {
+  provider  String
+  day       DateTime @db.Date
+  calls     Int      @default(0)
+  costCents Int      @default(0)
+
+  @@id([provider, day])
+  @@map("provider_usage")
+}
+
+// ---------------------------------------------------------------------------
+// API externa (credenciais por organização, só o hash é guardado)
+// ---------------------------------------------------------------------------
+
+model ApiCredential {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @db.Uuid
+  name        String
+  prefix      String    @unique
+  tokenHash   String    @unique
+  scopes      String[]
+  expiresAt   DateTime? @db.Timestamptz(3)
+  revokedAt   DateTime? @db.Timestamptz(3)
+  lastUsedAt  DateTime? @db.Timestamptz(3)
+  createdById String    @db.Uuid
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@map("api_credential")
+}

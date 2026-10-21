@@ -1,0 +1,1 @@
+export const BATCH_STATUS: Record<string, string> = { PARSED: "Prévia (não aplicado)", CONFIRMED: "Confirmado, na fila", APPLYING: "Aplicando", COMPLETED: "Concluído", CANCELED: "Cancelado", FAILED: "Concluído com pendências" };
