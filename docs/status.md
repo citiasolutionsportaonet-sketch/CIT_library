@@ -1,5 +1,12 @@
 # Status por fase
 
+## Vitrine visual e visão do banco — 21/10/2026
+
+- Menu **Vitrine**: apresentação no estilo de distribuidora, busca, categorias, marcas, filtro de fotos, ordenação, paginação e acesso ao detalhe do produto. Consulta real por organização, com autenticação e sem custos internos ou markup nessa apresentação.
+- Aba **Visão do banco**: produtos, preços disponíveis, fotos, marcas, preenchimento dos cadastros, estado de revisão e tabela de registros. Nenhuma classificação ou foto foi criada automaticamente.
+- `telas/catalogo-distribuidora.zip`: prévia autocontida, com amostra de 24 produtos e indicadores do banco na data de exportação. Abre como HTML no navegador; pesquisa, filtros, diálogo de produto e aba do banco funcionam sem recursos externos. É uma consulta estática e não grava no banco.
+- Validação: 158 unitários, 50 de integração e 9 E2E passaram; lint e build passaram. Inclui isolamento de organizações, proteção dos campos privados e interação/segurança da exportação HTML. Layout da prévia conferido em desktop e celular.
+
 ## Consistência de preços e restauração — 21/10/2026
 
 - Mediana e tamanho da amostra usam apenas a observação vigente aceita de cada URL de anúncio por produto, inclusive quando a URL aparece em provedores diferentes. Tela, CSV e API compartilham a regra; o histórico não é apagado. Cotações vencidas, futuras, rejeitadas, pendentes ou de listagem não entram no cálculo.

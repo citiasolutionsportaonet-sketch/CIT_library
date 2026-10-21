@@ -13,7 +13,8 @@ export default async function TenantLayout({ children, params }: LayoutProps<"/[
           <Link href={`/${ctx.tenantSlug}/produtos`} className="font-semibold">
             CIT Library <span className="font-normal text-slate-500">· {ctx.tenantName}</span>
           </Link>
-          <nav className="flex gap-3 text-sm">
+          <nav className="flex flex-wrap gap-x-3 gap-y-2 text-sm">
+            <Link href={`/${ctx.tenantSlug}/vitrine`} className="font-semibold text-emerald-800 hover:underline">Vitrine</Link>
             <Link href={`/${ctx.tenantSlug}/produtos`} className="text-slate-700 hover:underline">Produtos</Link>
             {can(ctx, "products:write") && (
               <Link href={`/${ctx.tenantSlug}/catalogo`} className="text-slate-700 hover:underline">Organizar</Link>

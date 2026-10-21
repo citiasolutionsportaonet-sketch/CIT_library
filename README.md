@@ -4,11 +4,17 @@ Biblioteca interna de produtos (Next.js 16 + PostgreSQL 17 + Prisma 7 + Better A
 Estado por fase: [docs/status.md](docs/status.md). Especificação: [CLAUDE.md](CLAUDE.md).
 Migrar para outro computador: [docs/migracao.md](docs/migracao.md) · Pesquisa e preços: [docs/pesquisa.md](docs/pesquisa.md) · API para outros sistemas: [docs/api.md](docs/api.md) · Importação: [docs/importacao-intelbras.md](docs/importacao-intelbras.md).
 
-## Telas do aplicativo
+## Ver a vitrine agora
 
-Capturas reais da aplicação em execução. [Ver login, catálogo e produto](telas/README.md).
+[**Baixar catálogo interativo (.zip)**](https://github.com/citiasolutionsportaonet-sketch/CIT_library/raw/refs/heads/main/telas/catalogo-distribuidora.zip)
 
-![Catálogo de produtos da CIT Library](telas/02-catalogo.png)
+Extraia o ZIP e abra **catalogo.html** no Chrome. Inclui busca, filtros, detalhes e a aba **Visão do banco**. Funciona sem instalar Node ou PostgreSQL e sem buscar recursos externos.
+
+Esta prévia contém uma amostra de 24 produtos reais e os indicadores da biblioteca na data da exportação. É uma consulta estática; não altera o banco. As fotos são as já cadastradas, e os demais produtos ficam identificados sem foto. No sistema autenticado, o menu **Vitrine** consulta o catálogo completo diretamente no banco.
+
+![Vitrine no estilo de distribuidora](telas/04-vitrine.png)
+
+[Ver o painel do banco](telas/05-banco.png) · [Todas as telas](telas/README.md) · [Documentação da vitrine](docs/vitrine.md)
 
 ## Para usar no dia a dia (este Mac)
 
