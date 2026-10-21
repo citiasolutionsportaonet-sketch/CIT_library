@@ -7,6 +7,7 @@
 - Limite: `API_RATE_PER_MINUTE` por credencial (429). Decimais como string. Notas internas nunca saem pela API.
 - `markupPercent` e `distributorCost` só são retornados com `costs:read`. Sem esse escopo, o preço de venda continua disponível com `prices:read`, mas esses dois campos são omitidos. Na interface e no CSV, o markup também acompanha a permissão de leitura de custos.
 - Essa restrição evita divulgar o percentual interno pela API. Se o markup for conhecido por outro meio, o preço calculado ainda permite estimar o custo por divisão; não é uma garantia de sigilo matemático do custo.
+- `market.acceptedOffers` conta anúncios distintos pela URL, usando apenas a observação vigente aceita dentro da validade configurada. Pesquisas repetidas e provedores diferentes para a mesma URL não aumentam a amostra. `/products/{id}/prices` usa a mesma regra em `quotes`, com no máximo 50 cotações vigentes.
 
 | Rota | Escopo |
 |---|---|

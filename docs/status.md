@@ -1,11 +1,18 @@
 # Status por fase
 
+## Consistência de preços e restauração — 21/10/2026
+
+- Mediana e tamanho da amostra usam apenas a observação vigente aceita de cada URL de anúncio por produto, inclusive quando a URL aparece em provedores diferentes. Tela, CSV e API compartilham a regra; o histórico não é apagado. Cotações vencidas, futuras, rejeitadas, pendentes ou de listagem não entram no cálculo.
+- A restauração também exige que a quantidade de mídias READY confira com o manifesto. Só informa sucesso depois de validar os dados e aplicar os privilégios.
+- Validação Linux/Node 22.23.3/PostgreSQL 17.11: 158 unitários e 47 de integração passaram, incluindo backup e restore reais com produto/foto sintéticos e recusa de manifesto com contagem incorreta. Lint, tipos e build passaram. Os testes E2E registrados na seção anterior de segurança não foram repetidos nesta etapa.
+- Próximo trabalho: revisar categorias, marcas e modelos do catálogo; completar fotos/documentos e validar provedores externos com credenciais. A identidade de anúncio ainda usa a URL armazenada; normalização de URLs equivalentes por provedor permanece como melhoria futura. Hospedagem fica para uma etapa posterior.
+
 ## Correções de segurança — 21/10/2026
 
 - Markup restrito a quem tem `costs:read`, tanto na interface quanto na API e no CSV. O preço de venda continua visível. Se o percentual já for conhecido externamente, ainda é possível estimar o custo a partir do preço.
 - Pesquisa: bloqueio de IPv4 mapeado em IPv6 e faixas especiais; conexão HTTP usa os endereços DNS validados, com validação de cada redirecionamento e TLS preservado.
 - Validação Linux/Node 22.23.3/PostgreSQL 17.11: 158 unitários e 39 de integração passaram; lint, tipos, build e auditoria de dependências de produção passaram. Dos 7 cenários E2E, 6 passaram na primeira execução; o seletor ambíguo de Brave foi corrigido e o cenário restante passou ao ser repetido.
-- Pendências da análise: mediana deve considerar a observação vigente de cada anúncio, e restauração deve reprovar divergência na contagem de mídias. Organização/revisão do catálogo continua pendente. Nenhuma classificação foi aplicada aos dados reais nesta correção.
+- As pendências de mediana e restauração dessa análise foram resolvidas na etapa de consistência acima. Organização/revisão do catálogo continua pendente. Nenhuma classificação foi aplicada aos dados reais nestas correções.
 
 ## Fase 0 — fundação · **verificada** (PostgreSQL local sem Docker)
 Pronto: scaffold Next 16.4.2, TS estrito, Tailwind 4, Prisma 7.10.1 (`prisma.config.ts`, adaptador pg), Compose PostgreSQL 17.11 com digest e healthcheck em loopback, `.env.example`, migração inicial, `/api/health` (só status; 503 sem banco), scripts do contrato.

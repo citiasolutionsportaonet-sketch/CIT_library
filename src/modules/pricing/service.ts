@@ -7,6 +7,7 @@ import { getDb, type Tx } from "@/server/db";
 import { DomainError, notFound, validation } from "@/server/errors";
 import { writeTx } from "@/server/maintenance";
 import { computePricing, Decimal, type Money, type PricingResult } from "./calc";
+import { currentAcceptedOffers } from "./offers";
 
 export const COST_LIST_NAME = "Custo distribuidor";
 export const MARKUP_CEILING = new Decimal("0.45");
@@ -98,11 +99,7 @@ export async function pricingFor(ctx: TenantContext, productIds: string[], opts:
   const cfg = await getPricingConfig(ctx.tenantId);
   const list = await db.priceList.findUnique({ where: { tenantId_normalizedName: { tenantId: ctx.tenantId, normalizedName: normalizeName(COST_LIST_NAME) } } });
   const costs = list ? await currentPrices(ctx.tenantId, list.id, productIds) : new Map<string, Money>();
-  const since = new Date(Date.now() - cfg.offerMaxAgeDays * 86400_000);
-  const offers = await db.marketOffer.findMany({
-    where: { tenantId: ctx.tenantId, productId: { in: productIds }, status: "ACCEPTED", isListingPage: false, observedAt: { gte: since } },
-    select: { productId: true, price: true },
-  });
+  const offers = await currentAcceptedOffers(ctx.tenantId, productIds, cfg.offerMaxAgeDays);
   const byProduct = new Map<string, Money[]>();
   for (const o of offers) {
     const a = byProduct.get(o.productId) ?? [];

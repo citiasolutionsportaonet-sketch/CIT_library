@@ -112,13 +112,15 @@ main(async () => {
         if (!(await fs.stat(path.join(mediaTarget, `${r.storageKey}/${v}.webp`)).catch(() => null))) missing++;
       }
     }
-    console.log(`\n✔ Restaurado em ${target}`);
     console.log(`  Produtos: ${c.rows[0].products} (backup: ${m.counts.products}) · Mídias: ${c.rows[0].media} (backup: ${m.counts.media}) · Arquivos faltando: ${missing}`);
-    if (missing || c.rows[0].products !== m.counts.products) throw new Error("Contagens divergentes após restauração.");
+    if (missing || c.rows[0].products !== m.counts.products || c.rows[0].media !== m.counts.media) {
+      throw new Error("Contagens divergentes após restauração; confira produtos, mídias e arquivos faltantes. O destino não foi validado.");
+    }
   } finally {
     await restored.end();
   }
   const appUrl = new URL(requireEnv("DATABASE_URL"));
   await run("npx", ["tsx", "scripts/db-grants.ts"], { env: { ...process.env, GRANTS_DATABASE_URL: withDbName(ownerUrl, target), GRANTS_APP_DATABASE_URL: withDbName(appUrl.toString(), target) } });
+  console.log(`\n✔ Restaurado em ${target}`);
   console.log(`\nPara testar isoladamente, use um .env separado com:\n  DATABASE_URL=<mesma URL do app com /${target}>\n  MEDIA_ROOT=${mediaTarget}\n(sessões foram revogadas; todos precisarão entrar de novo.)`);
 });

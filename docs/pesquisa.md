@@ -10,6 +10,15 @@ Serviço independente do Claude Code: roda no **worker** (`npm run worker`), len
 5. Tudo vira **candidato**. Imagem só entra na galeria após aprovação, passando pelo mesmo pipeline do upload (reencode, sem EXIF). Máx. 3 imagens por produto.
 6. Oferta é aceita automaticamente só com correspondência estrita (todos os termos do modelo, marca, condição nova, sem palavras de kit/peça/compatível). O resto aguarda revisão. Links de página de busca/loja **nunca** entram na mediana.
 
+## Mediana e quantidade de ofertas
+
+- Cada URL de anúncio conta uma vez por produto e organização, mesmo se descoberta por provedores diferentes. O histórico das pesquisas é preservado.
+- É escolhida a observação com maior `observedAt` até o momento da consulta, dentro da validade configurada (padrão: 90 dias). Empates usam `createdAt` e depois `id`.
+- Só entra no cálculo se essa observação vigente estiver aceita e não for página de listagem. Uma observação nova rejeitada ou pendente retira o anúncio da amostra; o preço antigo aceito não é reaproveitado.
+- Tela, CSV e API usam a mesma seleção. A API de preços retorna até 50 cotações vigentes, ordenadas pelas mais recentes.
+- Exemplo: um anúncio de R$ 100 consultado três vezes e outro de R$ 200 formam **duas ofertas**, com mediana de R$ 150. Não atingem o mínimo padrão de três ofertas.
+- A identidade usa a URL armazenada: URLs diferentes que levem ao mesmo anúncio ainda precisam de normalização específica por provedor.
+
 ## Regras de acesso à internet
 - robots.txt respeitado por domínio; 5xx no robots = não acessar.
 - Bloqueio de IP privado/loopback/metadados (SSRF), inclusive IPv4 mapeado em IPv6, faixas especiais e redirecionamentos. O conector HTTP usa os próprios endereços DNS validados ao abrir o socket, para impedir troca do destino entre a checagem e a conexão (DNS rebinding). Certificados TLS continuam sendo verificados.

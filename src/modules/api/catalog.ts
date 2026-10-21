@@ -3,6 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { normalizeCode } from "@/lib/normalize";
 import { computePricing, Decimal, type Money } from "@/modules/pricing/calc";
 import { COST_LIST_NAME, currentPrices, getPricingConfig } from "@/modules/pricing/service";
+import { currentAcceptedOffers } from "@/modules/pricing/offers";
 import { normalizeName } from "@/lib/normalize";
 import { getDb } from "@/server/db";
 import { notFound, validation } from "@/server/errors";
@@ -18,8 +19,7 @@ async function pricingMap(p: ApiPrincipal, ids: string[]) {
   const cfg = await getPricingConfig(p.tenantId);
   const list = await db.priceList.findUnique({ where: { tenantId_normalizedName: { tenantId: p.tenantId, normalizedName: normalizeName(COST_LIST_NAME) } } });
   const costs = list ? await currentPrices(p.tenantId, list.id, ids) : new Map<string, Money>();
-  const since = new Date(Date.now() - cfg.offerMaxAgeDays * 86400_000);
-  const offers = await db.marketOffer.findMany({ where: { tenantId: p.tenantId, productId: { in: ids }, status: "ACCEPTED", isListingPage: false, observedAt: { gte: since } }, select: { productId: true, price: true } });
+  const offers = await currentAcceptedOffers(p.tenantId, ids, cfg.offerMaxAgeDays);
   const by = new Map<string, Money[]>();
   for (const o of offers) by.set(o.productId, [...(by.get(o.productId) ?? []), new Decimal(o.price.toString())]);
   const out = new Map<string, Record<string, unknown>>();
@@ -123,12 +123,8 @@ export async function apiProductPrices(p: ApiPrincipal, id: string) {
   const exists = await getDb().product.findFirst({ where: { id, tenantId: p.tenantId }, select: { id: true } });
   if (!exists) throw notFound("Produto");
   const pricing = (await pricingMap(p, [id])).get(id);
-  const offers = await getDb().marketOffer.findMany({
-    where: { tenantId: p.tenantId, productId: id, status: "ACCEPTED", isListingPage: false },
-    orderBy: [{ observedAt: "desc" }, { id: "asc" }],
-    take: 50,
-    select: { sourceName: true, url: true, price: true, shipping: true, currency: true, condition: true, observedAt: true, provider: true },
-  });
+  const cfg = await getPricingConfig(p.tenantId);
+  const offers = (await currentAcceptedOffers(p.tenantId, [id], cfg.offerMaxAgeDays)).slice(0, 50);
   return {
     data: {
       pricing,
